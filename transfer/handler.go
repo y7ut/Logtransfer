@@ -37,20 +37,20 @@ func (p PipeLine) Enter(m Matedate) Matedate {
 
 // 修改插件
 type Edit struct {
-	Params map[string]interface{}
+	Params []map[string]string
 }
 
 func (p Edit) Handle(m Matedate) Matedate {
-	key := fmt.Sprintf("%s", p.Params["key"])
-	log.Println(key)
-	log.Println(p.Params["value"])
-	m[key] = p.Params["value"]
-	m["EDIT"] = "ok"
+	for _, item := range p.Params {
+		currentKey := item["key"]
+		currentParams := item["value"]
+		m[currentKey] = currentParams
+	}
 	return m
 }
 
 func (p *Edit) setParams(params string) {
-	var paramsValue map[string]interface{}
+	var paramsValue []map[string]string
 	err := json.Unmarshal([]byte(params), &paramsValue)
 	if err != nil {
 		log.Printf("Edit Plugin json decode params(%s) err :  err: %s", params, err)
@@ -69,14 +69,7 @@ func (p SaveES) Handle(m Matedate) Matedate {
 }
 
 
-func (p *SaveES) setParams(params string) {
-	var paramsValue map[string]interface{}
-	err := json.Unmarshal([]byte(params), &paramsValue)
-	if err != nil {
-		log.Printf("SaveES Plugin json decode params(%s) err :  err: %s", params, err)
-	}
-	p.Params = paramsValue
-}
+func (p *SaveES) setParams(params string) {}
 
 // 打印
 type Dump struct {
