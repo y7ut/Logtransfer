@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -16,10 +17,10 @@ type Formater func(string, string) (Matedate, error)
 
 // service错误日志的处理
 func FormatServiceWfLog(sourceKey string, message string) (Matedate, error) {
-	result := make(Matedate, 0)
+	result := make(Matedate)
 	levelIndex := strings.Index(message, ":")
 	if levelIndex == -1 {
-		return result, fmt.Errorf("message format error.")
+		return result, fmt.Errorf("message format error")
 	}
 	// log.Println(message)
 	result["topic"] = sourceKey
@@ -49,9 +50,19 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedate, error) {
 
 // service错误日志的处理
 func DefaultLog(sourceKey string, message string) (Matedate, error) {
-	result := make(Matedate, 0)
+	result := make(Matedate)
 	result["topic"] = sourceKey
 	result["message"] = message
 
+	return result, nil
+}
+
+// Json 格式的错误日志处理
+func DefaultJsonLog(sourceKey string, message string) (Matedate, error) {
+	result := make(Matedate)
+	err := json.Unmarshal([]byte(message), &result)
+	if err != nil {
+		return nil, err
+	}
 	return result, nil
 }

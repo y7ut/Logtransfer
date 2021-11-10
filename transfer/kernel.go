@@ -19,7 +19,7 @@ import (
 var (
 	Start          = make(chan *Customer)
 	Close          = make(chan string)
-	CustomerManger = make(map[string]*Customer, 0)
+	CustomerManger = make(map[string]*Customer)
 	MaxRetryTime   = 10
 	mu             sync.Mutex
 	closeWg        sync.WaitGroup
@@ -37,15 +37,18 @@ func getRegisterTopics() (topics []string) {
 
 // 核心启动
 func Run(confPath string) {
+	// 加载配置
 	conf.Init(confPath)
+	// 初始化ES客户端
 	esClient, err := elastic.NewClient(elastic.SetSniff(false), elastic.SetURL(conf.APPConfig.Es.Address))
 	if err != nil {
 		fmt.Println("connect es error", err)
 		panic(err)
 	}
-
+    // 做一个master的上下文
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// 
 	for i := 0; i < 3; i++ {
 		go MatedateSender(ctx, esClient)
 	}
@@ -72,20 +75,10 @@ func Run(confPath string) {
 	}()
 
 	for topic := range ChooseTopic() {
-		GroupID := topic + "_group"
-		r := queue.InitReader(topic, GroupID)
-
-		currentFormater := DefaultLog
-
-		// TODO:使用ETCD下发需要的pipe handler
-		if strings.Contains(topic, "service") {
-			currentFormater = FormatServiceWfLog
-		}
-		// Edit->Save->Dump 这个顺序
-		// pipe := &PipeLine{Current: Edit, Next: &PipeLine{Current: Dump, Next: &PipeLine{Current: SaveES, Next: nil}}}
-
-		pipe := &PipeLine{Current: Edit, Next: &PipeLine{Current: SaveES, Next: nil}}
-		currentCustomer := &Customer{Reader: r, done: make(chan struct{}), HandlePipeline: pipe, Format: currentFormater}
+		
+		GroupID := topic.Name + "_group"
+		r := queue.InitReader(topic.Name, GroupID)
+		currentCustomer := &Customer{Reader: r, done: make(chan struct{}), HandlePipeline: topic.PipeLine, Format: topic.Format}
 		log.Printf("Check Customer group of [%s] success!", GroupID)
 		Start <- currentCustomer
 	}
@@ -129,7 +122,7 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 
 	// var trycount int
 	// var cstSh, _ = time.LoadLocation("Asia/Shanghai") //上海时区
-
+	var errMessage strings.Builder
 	for {
 		select {
 		case <-c.Listen():
@@ -143,16 +136,25 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 
 			m, err := c.Reader.ReadMessage(ctx)
 
+			
 			if err != nil {
 				// 退出
 				// c.Exit()
-				log.Println(err)
+				errMessage.Reset()
+				errMessage.WriteString("Reader Error")
+				errMessage.WriteString(err.Error())
+				log.Println(errMessage.String())
+				
 				continue
 			}
 
 			matedata, err := c.Format(string(c.Reader.Config().Topic), string(m.Value))
 			if err != nil {
-				log.Println(err)
+				errMessage.Reset()
+				errMessage.WriteString("Format Error")
+				errMessage.WriteString(err.Error())
+				log.Println(errMessage.String())
+
 				continue
 			}
 			// 流入pipe

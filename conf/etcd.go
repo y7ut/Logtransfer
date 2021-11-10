@@ -14,9 +14,10 @@ import (
 var (
 	configPath = "/logagent/config/"
 	statusPath = "/logagent/active/"
+	topicPath = "/logagent/topic/"
 )
 
-type LogagentConfig []byte
+type EtcdValue []byte
 
 var cli *clientv3.Client
 
@@ -31,8 +32,9 @@ func Init(confPath string) {
 
 func initConnect() *clientv3.Client {
 
+	addressList := strings.Split(APPConfig.Etcd.Address, ",")
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{APPConfig.Etcd.Address},
+		Endpoints:  addressList,
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
@@ -43,7 +45,7 @@ func initConnect() *clientv3.Client {
 	return cli
 }
 
-func GetAllConfFromEtcd() []LogagentConfig {
+func GetAllConfFromEtcd() []EtcdValue {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, err := cli.Get(ctx, configPath, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
@@ -52,11 +54,9 @@ func GetAllConfFromEtcd() []LogagentConfig {
 		panic(fmt.Sprintf("get failed, err:%s \n", err))
 	}
 
-	configs := make([]LogagentConfig, 0)
+	configs := make([]EtcdValue, 0)
 
 	for _, etcdResult := range resp.Kvs {
-		
-		
 
 		etcdKey := statusPath + string(etcdResult.Key[strings.LastIndex(string(etcdResult.Key), "/")+1:])
 
@@ -77,6 +77,25 @@ func GetAllConfFromEtcd() []LogagentConfig {
 		}
 		
 		
+	}
+
+	return configs
+}
+
+
+func GetAllTopicFromEtcd() []EtcdValue {
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	resp, err := cli.Get(ctx, topicPath, clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortDescend))
+	cancel()
+	if err != nil {
+		panic(fmt.Sprintf("get failed, err:%s \n", err))
+	}
+
+	configs := make([]EtcdValue, 0)
+
+	for _, etcdResult := range resp.Kvs {
+		configs = append(configs, etcdResult.Value)
 	}
 
 	return configs
