@@ -9,8 +9,8 @@ import (
 )
 
 func InitReader(topic string, groupId string) *kafka.Reader {
-	// 先去创建一下这个分组
-	CreateCustomerGroup(topic, groupId)
+	// // 先去创建一下这个分组
+	// CreateCustomerGroup(topic, groupId)
 
 	// make a writer that produces to topic-A, using the least-bytes distribution
 	r := kafka.NewReader(kafka.ReaderConfig{

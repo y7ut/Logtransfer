@@ -71,11 +71,14 @@ func loadTopics() map[string]*Topic {
 
 		p := PipeLine{}
 
-
+		// log.Println("get config",  currentTopic.PipelineConfig)
 		for _, v := range currentTopic.PipelineConfig {
-			
-		   makePiepline(&p,v)
-
+			currentPlugin := pluginsBoard[v.Name]
+			err := currentPlugin.setParams(v.Params)
+			if err != nil {
+				log.Panicln("plugin encode params error:", err)
+			}
+			p.appendPlugin(currentPlugin)
 		}
 		var formatMethod Formater
 
@@ -106,20 +109,4 @@ func ChooseTopic() map[*Topic]bool {
 	}
 
 	return ableTopics
-}
-
-func makePiepline(p *PipeLine ,config PipeLinePluginsConfig){
-	if p.Current == nil {
-		current := pluginsBoard[config.Name]
-
-		if config.Params != "" {
-			current.setParams(config.Params)
-		}
-
-		p.Current = &current
-		p.Next = &PipeLine{}
-		log.Printf("install plugin :%s", config.Label,)
-		return
-	}
-    makePiepline(p.Next, config)
 }

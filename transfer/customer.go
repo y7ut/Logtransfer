@@ -33,8 +33,8 @@ func getCustomer(topic string) (customer *Customer, ok bool) {
 	return customer, ok
 }
 
-func uninstallCustomer(topic string) {
-	mu.Lock()
-	delete(CustomerManger, topic)
-	mu.Unlock()
-}
+// func uninstallCustomer(topic string) {
+// 	mu.Lock()
+// 	delete(CustomerManger, topic)
+// 	mu.Unlock()
+// }

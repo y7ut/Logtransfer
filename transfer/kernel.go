@@ -23,7 +23,7 @@ var (
 	MaxRetryTime   = 10
 	mu             sync.Mutex
 	closeWg        sync.WaitGroup
-	messages       = make(chan Matedate, conf.APPConfig.Es.BulkSize)
+	messages       = make(chan *Matedate, conf.APPConfig.Es.BulkSize)
 )
 
 func getRegisterTopics() (topics []string) {
@@ -45,10 +45,11 @@ func Run(confPath string) {
 		fmt.Println("connect es error", err)
 		panic(err)
 	}
-    // 做一个master的上下文
+
+	// 做一个master的上下文
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// 
+	//
 	for i := 0; i < 3; i++ {
 		go MatedateSender(ctx, esClient)
 	}
@@ -75,7 +76,7 @@ func Run(confPath string) {
 	}()
 
 	for topic := range ChooseTopic() {
-		
+
 		GroupID := topic.Name + "_group"
 		r := queue.InitReader(topic.Name, GroupID)
 		currentCustomer := &Customer{Reader: r, done: make(chan struct{}), HandlePipeline: topic.PipeLine, Format: topic.Format}
@@ -108,7 +109,7 @@ func Run(confPath string) {
 }
 
 func sign() <-chan os.Signal {
-	c := make(chan os.Signal,2)
+	c := make(chan os.Signal, 2)
 	// 监听信号
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2)
 	return c
@@ -123,6 +124,9 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 	// var trycount int
 	// var cstSh, _ = time.LoadLocation("Asia/Shanghai") //上海时区
 	var errMessage strings.Builder
+	// log.Println(c.HandlePipeline.pipe)
+
+	var matedata Matedate
 	for {
 		select {
 		case <-c.Listen():
@@ -136,7 +140,6 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 
 			m, err := c.Reader.ReadMessage(ctx)
 
-			
 			if err != nil {
 				// 退出
 				// c.Exit()
@@ -144,17 +147,16 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 				errMessage.WriteString("Reader Error")
 				errMessage.WriteString(err.Error())
 				log.Println(errMessage.String())
-				
+
 				continue
 			}
 
-			matedata, err := c.Format(string(c.Reader.Config().Topic), string(m.Value))
+			matedata, err = c.Format(string(c.Reader.Config().Topic), string(m.Value))
 			if err != nil {
 				errMessage.Reset()
 				errMessage.WriteString("Format Error")
 				errMessage.WriteString(err.Error())
 				log.Println(errMessage.String())
-
 				continue
 			}
 			// 流入pipe
@@ -174,7 +176,7 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 	for {
 		select {
 		case m := <-messages:
-			indexRequest := elastic.NewBulkIndexRequest().Index("logs").Doc(m)
+			indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.data)
 			bulkRequest.Add(indexRequest)
 
 		case <-tick.C:
