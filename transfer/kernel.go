@@ -176,6 +176,8 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 	for {
 		select {
 		case m := <-messages:
+			log.Printf("created message : %s : \n", m.Index)
+			log.Println(m.data)
 			indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.data)
 			bulkRequest.Add(indexRequest)
 
@@ -183,6 +185,7 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 			// Do sends the bulk requests to Elasticsearch
 			SenderMu.Lock()
 			count := bulkRequest.NumberOfActions()
+
 			if count > 0 {
 				log.Printf("Send message to Es: %d : \n", bulkRequest.NumberOfActions())
 				_, err := bulkRequest.Do(ctx)

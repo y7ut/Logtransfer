@@ -2,14 +2,16 @@ package transfer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
 var pluginsBoard = map[string]Handler{
-	"Dump": &Dump{},
-	"Edit": &Edit{},
+	"Dump":   &Dump{},
+	"Edit":   &Edit{},
 	"SaveES": &SaveES{},
 }
 
@@ -85,30 +87,15 @@ func (edit *Edit) HandleFunc(m *Matedate) error {
 	key := (*edit.params)["key"]
 	value := (*edit.params)["value"]
 	(*m).data[key.(string)] = value
-	(*m).data["eidt"] = 1
 	return nil
 }
 
 func (edit *Edit) setParams(params string) error {
-	var paramsValue map[string]interface{}
-	var checkKeyString bool
-	var checkValueString bool
 
-	err := json.Unmarshal([]byte(params), &paramsValue)
-
-	for key := range paramsValue {
-		if key == "key" {
-			checkKeyString = true
-		}
-		if key == "value" {
-			checkValueString = true
-		}
-	}
-
-	if !(checkKeyString && checkValueString) {
-		return fmt.Errorf("please set params true")
-	}
-
+	paramsValue, err := checkParams(params, "key", "value")
+	if err != nil{
+		return err
+	} 
 	edit.params = &paramsValue
 	return err
 }
@@ -118,10 +105,60 @@ type SaveES Plugin
 
 func (saveEs *SaveES) HandleFunc(m *Matedate) error {
 	log.Println("SaveES:")
+	m.Index = fmt.Sprintf("%s", (*saveEs.params)["index"])
+	m.data["topic"] = m.Topic
+	m.data["level"] = m.Level
 	messages <- m
 	return nil
 }
 
 func (saveEs *SaveES) setParams(params string) error {
+
+	paramsValue, err := checkParams(params, "index")
+	if err != nil{
+		return err
+	} 
+	saveEs.params = &paramsValue
+	return err
+}
+
+// 警报与监测
+type Alarm Plugin
+
+func (alarm *Alarm) HandleFunc(m *Matedate) error {
 	return nil
+}
+
+func (alarm *Alarm) setParams(params string) error {
+
+	paramsValue, err := checkParams(params, "hit", "idle_time")
+	if err != nil{
+		return err
+	} 
+	alarm.params = &paramsValue
+
+	return err
+}
+
+func checkParams(paramsJson string, key ...string) (value map[string]interface{}, err error) {
+	err = json.Unmarshal([]byte(paramsJson), &value)
+
+	if err != nil {
+		return value, err
+	}
+	var errMessage strings.Builder
+	var errCheck bool
+	
+	errMessage.WriteString("Plugin params errors: ")
+	for _, checkItem := range key {
+		if value[checkItem] == nil {
+			errCheck = true
+			errMessage.WriteString(checkItem)
+		}
+	}
+
+	if errCheck {
+		return value, errors.New(errMessage.String())
+	}
+	return value, nil
 }

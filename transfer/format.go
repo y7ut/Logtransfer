@@ -35,15 +35,22 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedate, error) {
 	mateItem.create = logTime
 	keyword := serviceWfLogKeyWord
 	for _, word := range keyword {
+
 		flysnowRegexp := regexp.MustCompile(fmt.Sprintf(`%s\[(?s:(.*?))\]`, word))
 		logContent := flysnowRegexp.FindString(message)
 		curentSub := contentRegexp.FindStringSubmatch(logContent)
 		if len(curentSub) < 1 {
 			continue
 		}
-		mateItem.data[word] = contentRegexp.FindStringSubmatch(logContent)[1]
+		if word == "errmsg"{
+			
+			mateItem.data["message"] = strings.Replace(contentRegexp.FindStringSubmatch(logContent)[1],`"`,"",-1)
+		}else{
+			mateItem.data[word] = contentRegexp.FindStringSubmatch(logContent)[1]
+		}
+		
 	}
-
+	mateItem.data["timestamp"] = mateItem.create
 	result := *mateItem
 	mateItem.reset()
 	MatePool.Put(mateItem)
