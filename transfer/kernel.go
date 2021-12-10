@@ -176,8 +176,7 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 	for {
 		select {
 		case m := <-messages:
-			log.Printf("created message : %s : \n", m.Index)
-			log.Println(m.data)
+
 			indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.data)
 			bulkRequest.Add(indexRequest)
 
