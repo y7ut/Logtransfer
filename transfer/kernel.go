@@ -2,28 +2,29 @@ package transfer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	elastic "github.com/olivere/elastic/v7"
+
 	"github.com/y7ut/logtransfer/conf"
-	"github.com/y7ut/logtransfer/queue"
+	"github.com/y7ut/logtransfer/entity"
+	"github.com/y7ut/logtransfer/plugin"
+	"github.com/y7ut/logtransfer/source"
 )
 
 var (
-	Start          = make(chan *Customer)
+	Start          = make(chan *source.Customer)
 	Close          = make(chan string)
-	CustomerManger = make(map[string]*Customer)
+	CustomerManger = make(map[string]*source.Customer)
 	MaxRetryTime   = 10
 	mu             sync.Mutex
 	closeWg        sync.WaitGroup
-	messages       = make(chan *Matedate, conf.APPConfig.Es.BulkSize)
 )
 
 func getRegisterTopics() (topics []string) {
@@ -49,38 +50,34 @@ func Run(confPath string) {
 	// 做一个master的上下文
 	ctx, cancel := context.WithCancel(context.Background())
 
-	//
+	// 启动es消息发送器
 	for i := 0; i < 3; i++ {
-		go MatedateSender(ctx, esClient)
+		go entity.MatedateSender(ctx, esClient)
 	}
 
+	// 用于处理启动与关闭消费处理器的信号通知
 	go func() {
 		for {
 			select {
 			case customer := <-Start:
-				registerManger(customer)
-				go ReadingMessage(ctx, customer)
+				source.RegisterManger(customer)
+				go source.ReadingMessage(ctx, customer)
 
 			case closer := <-Close:
-				c, ok := getCustomer(closer)
+				c, ok := source.GetCustomer(closer)
 				if !ok {
 					log.Printf(" Customer %s unstall Failed ", closer)
 
 				}
 				c.Exit()
-
 				closeWg.Done()
-
 			}
 		}
 	}()
 
+	// TODO: 动态的注册customer，目前仅支持初始化的时候来加载
 	for topic := range ChooseTopic() {
-
-		GroupID := topic.Name + "_group"
-		r := queue.InitReader(topic.Name, GroupID)
-		currentCustomer := &Customer{Reader: r, done: make(chan struct{}), HandlePipeline: topic.PipeLine, Format: topic.Format}
-		log.Printf("Check Customer group of [%s] success!", GroupID)
+		currentCustomer := source.InitCustomer(topic)
 		Start <- currentCustomer
 	}
 
@@ -98,7 +95,7 @@ func Run(confPath string) {
 				log.Printf(" Customer %s unstalling...", topic)
 				closeWg.Wait()
 			}
-			close(messages)
+			entity.CloseMessageChan()
 
 			log.Printf(" Success unstall %d Transfer", len(currentTopics))
 			os.Exit(0)
@@ -115,97 +112,62 @@ func sign() <-chan os.Signal {
 	return c
 }
 
-// 從Kafka中消費消息，注意这里会提交commit offset
-func ReadingMessage(ctx context.Context, c *Customer) {
-	defer c.Reader.Close()
+// 收集所有需要监听的topic
+func ChooseTopic() map[*source.Topic]bool {
+	collector := source.LoadCollectors()
+	topics := loadTopics()
 
-	log.Printf("Start Customer Group[%s] success!", c.Reader.Config().GroupID)
-
-	// var trycount int
-	// var cstSh, _ = time.LoadLocation("Asia/Shanghai") //上海时区
-	var errMessage strings.Builder
-	// log.Println(c.HandlePipeline.pipe)
-
-	var matedata Matedate
-	for {
-		select {
-		case <-c.Listen():
-			// 监听需要关闭的信号
-			log.Println("Close customer of Topic :", c.Reader.Config().Topic)
-			return
-		default:
-			// // 使用超时上下文, 但是这样是非阻塞，超过deadline就报错了
-			// // timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			// // 这里使用阻塞的上下文
-
-			m, err := c.Reader.ReadMessage(ctx)
-
-			if err != nil {
-				// 退出
-				// c.Exit()
-				errMessage.Reset()
-				errMessage.WriteString("Reader Error")
-				errMessage.WriteString(err.Error())
-				log.Println(errMessage.String())
-
-				continue
-			}
-
-			matedata, err = c.Format(string(c.Reader.Config().Topic), string(m.Value))
-			if err != nil {
-				errMessage.Reset()
-				errMessage.WriteString("Format Error")
-				errMessage.WriteString(err.Error())
-				log.Println(errMessage.String())
-				continue
-			}
-			// 流入pipe
-			c.HandlePipeline.Enter(matedata)
-		}
+	ableTopics := make(map[*source.Topic]bool)
+	for _, v := range collector {
+		currentTopic := topics[v.Topic]
+		ableTopics[currentTopic] = true
 	}
+
+	return ableTopics
 }
 
-func MatedateSender(ctx context.Context, esClient *elastic.Client) {
+// 解析全部的Topic并加载内部的格式器和插件pipeline
+func loadTopics() map[string]*source.Topic {
+	configs := conf.GetAllTopicFromEtcd()
 
-	tick := time.NewTicker(3 * time.Second)
-	var (
-		SenderMu sync.Mutex
-	)
+	topics := make(map[string]*source.Topic)
 
-	bulkRequest := esClient.Bulk()
-	for {
-		select {
-		case m := <-messages:
+	for _, v := range configs {
 
-			indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.data)
-			bulkRequest.Add(indexRequest)
-
-		case <-tick.C:
-			// Do sends the bulk requests to Elasticsearch
-			SenderMu.Lock()
-			count := bulkRequest.NumberOfActions()
-
-			if count > 0 {
-				log.Printf("Send message to Es: %d : \n", bulkRequest.NumberOfActions())
-				_, err := bulkRequest.Do(ctx)
-				if err != nil {
-					log.Println("Save Es Error:", err)
-				}
-				bulkRequest.Reset()
-			}
-			SenderMu.Unlock()
-
-		case <-ctx.Done():
-			// Do sends the bulk requests to Elasticsearch
-			SenderMu.Lock()
-			_, err := bulkRequest.Do(ctx)
-			if err != nil {
-				log.Println("Save Es Error:", err)
-			}
-			bulkRequest.Reset()
-			SenderMu.Unlock()
-			log.Println("Exiting...")
-			return
+		var currentTopic source.TopicConfig
+		err := json.Unmarshal(v, &currentTopic)
+		if err != nil {
+			log.Printf("json decode config(%s) err :  err: %s", v, err)
 		}
+		log.Printf("Init Topic:%s ", currentTopic.Label)
+		if currentTopic.PipelineConfig == nil {
+			log.Printf("get topic setting error:%s ", currentTopic.Label)
+		}
+
+		p := plugin.PipeLine{}
+
+		// log.Println("get config",  currentTopic.PipelineConfig)
+		for _, v := range currentTopic.PipelineConfig {
+			currentPlugin := pluginsBoard[v.Name]
+			err := currentPlugin.SetParams(v.Params)
+			if err != nil {
+				log.Panicln("plugin encode params error:", err)
+			}
+			p.AppendPlugin(currentPlugin)
+		}
+		var formatMethod entity.Formater
+
+		switch currentTopic.Format {
+
+		case 1:
+			formatMethod = entity.DefaultJsonLog
+		case 2:
+			formatMethod = entity.FormatServiceWfLog
+		default:
+			formatMethod = entity.DefaultLog
+
+		}
+		topics[currentTopic.Name] = &source.Topic{Name: currentTopic.Name, Label: currentTopic.Label, PipeLine: &p, Format: formatMethod}
 	}
+	return topics
 }

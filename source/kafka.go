@@ -1,4 +1,4 @@
-package queue
+package source
 
 import (
 	"log"
@@ -37,3 +37,4 @@ func CreateCustomerGroup(topic string, groupId string) {
 		log.Println("create CustomerGroup error:", err)
 	}
 }
+

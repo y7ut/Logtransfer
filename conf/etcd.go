@@ -45,6 +45,7 @@ func initConnect() *clientv3.Client {
 	return cli
 }
 
+// 获取当前所有的任务 (目前在初始化时使用)
 func GetAllConfFromEtcd() []EtcdValue {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -57,7 +58,7 @@ func GetAllConfFromEtcd() []EtcdValue {
 	configs := make([]EtcdValue, 0)
 
 	for _, etcdResult := range resp.Kvs {
-
+		// 根据系统中当前全部的节点名称, 确定节点状态 
 		etcdKey := statusPath + string(etcdResult.Key[strings.LastIndex(string(etcdResult.Key), "/")+1:])
 
 		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -82,7 +83,7 @@ func GetAllConfFromEtcd() []EtcdValue {
 	return configs
 }
 
-
+// 加载所有的Topic主题配置信息
 func GetAllTopicFromEtcd() []EtcdValue {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
