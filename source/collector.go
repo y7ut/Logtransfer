@@ -54,48 +54,62 @@ func LoadCollectors() []Collector {
 	return collectors
 }
 
-// func loadTopics() map[string]*Topic {
-// 	configs := conf.GetAllTopicFromEtcd()
+// 收集所有需要监听的topic
+func ChooseTopic() map[*Topic]bool {
+	collector := LoadCollectors()
+	topics := loadTopics()
 
-// 	topics := make(map[string]*Topic)
+	ableTopics := make(map[*Topic]bool)
+	for _, v := range collector {
+		currentTopic := topics[v.Topic]
+		ableTopics[currentTopic] = true
+	}
 
-// 	for _, v := range configs {
+	return ableTopics
+}
 
-// 		var currentTopic TopicConfig
-// 		err := json.Unmarshal(v, &currentTopic)
-// 		if err != nil {
-// 			log.Printf("json decode config(%s) err :  err: %s", v, err)
-// 		}
-// 		log.Printf("Init Topic:%s ", currentTopic.Label)
-// 		if currentTopic.PipelineConfig == nil {
-// 			log.Printf("get topic setting error:%s ", currentTopic.Label)
-// 		}
+// 解析全部的Topic并加载内部的格式器和插件pipeline
+func loadTopics() map[string]*Topic {
+	configs := conf.GetAllTopicFromEtcd()
 
-// 		p := plugin.PipeLine{}
+	topics := make(map[string]*Topic)
 
-// 		// log.Println("get config",  currentTopic.PipelineConfig)
-// 		for _, v := range currentTopic.PipelineConfig {
-// 			currentPlugin := plugins.pluginsBoard[v.Name]
-// 			err := currentPlugin.SetParams(v.Params)
-// 			if err != nil {
-// 				log.Panicln("plugin encode params error:", err)
-// 			}
-// 			p.AppendPlugin(currentPlugin)
-// 		}
-// 		var formatMethod entity.Formater
+	for _, v := range configs {
 
-// 		switch currentTopic.Format {
+		var currentTopic TopicConfig
+		err := json.Unmarshal(v, &currentTopic)
+		if err != nil {
+			log.Printf("json decode config(%s) err :  err: %s", v, err)
+		}
+		log.Printf("Init Topic:%s ", currentTopic.Label)
+		if currentTopic.PipelineConfig == nil {
+			log.Printf("get topic setting error:%s ", currentTopic.Label)
+		}
 
-// 		case 1:
-// 			formatMethod = entity.DefaultJsonLog
-// 		case 2:
-// 			formatMethod = entity.FormatServiceWfLog
-// 		default:
-// 			formatMethod = entity.DefaultLog
+		p := plugin.PipeLine{}
 
-// 		}
-// 		topics[currentTopic.Name] = &Topic{Name: currentTopic.Name, Label: currentTopic.Label, PipeLine: &p, Format: formatMethod}
-// 	}
-// 	return topics
-// }
+		// log.Println("get config",  currentTopic.PipelineConfig)
+		for _, v := range currentTopic.PipelineConfig {
+			currentPlugin := plugin.RegistedPlugins[v.Name]
+			err := currentPlugin.SetParams(v.Params)
+			if err != nil {
+				log.Panicln("plugin encode params error:", err)
+			}
+			p.AppendPlugin(currentPlugin)
+		}
+		var formatMethod entity.Formater
 
+		switch currentTopic.Format {
+
+		case 1:
+			formatMethod = entity.DefaultJsonLog
+		case 2:
+			formatMethod = entity.FormatServiceWfLog
+		default:
+			formatMethod = entity.DefaultLog
+
+		}
+		topics[currentTopic.Name] = &Topic{Name: currentTopic.Name, Label: currentTopic.Label, PipeLine: &p, Format: formatMethod}
+	}
+	return topics
+}
