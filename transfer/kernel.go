@@ -67,6 +67,10 @@ func Run(confPath string) {
 		Start <- currentCustomer
 	}
 
+	// TODO: 还要监听Topic的配置变更
+	// 目前是通过topic的name来注册所有的消费处理器
+	// 所以直接给对应的topic中的customer重启就可以杀了就可以了
+
 	for sign := range sign() {
 		switch sign {
 		case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM:

@@ -18,9 +18,9 @@ var (
 
 // 消费处理器
 type Customer struct {
-	Reader         *kafka.Reader      // 特定消费者的专属Kafka Reader
-	HandlePipeline *plugin.PipeLine   // 从Topic中构建的Piepline
-	Format         entity.Formater   // 解析元数据的格式器
+	Reader         *kafka.Reader      // 特定消费者的专属Kafka Reader (我从哪里来)
+	HandlePipeline *plugin.PipeLine   // 从Topic中构建的Piepline (要到那里去)
+	Format         entity.Formater   // 解析元数据的格式器 （变形记。。）
 	done           chan struct{}	// 结束标志
 }
 
@@ -86,6 +86,8 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 		select {
 		case <-c.Listen():
 			// 监听需要关闭的信号
+
+			c.Exit()
 			log.Println("Close customer of Topic :", c.Reader.Config().Topic)
 			return
 		default:
