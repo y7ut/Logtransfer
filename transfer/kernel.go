@@ -19,20 +19,8 @@ import (
 var (
 	Start          = make(chan *source.Customer)
 	Close          = make(chan string)
-	CustomerManger = make(map[string]*source.Customer)
-	MaxRetryTime   = 10
-	mu             sync.Mutex
 	closeWg        sync.WaitGroup
 )
-
-func getRegisterTopics() (topics []string) {
-	mu.Lock()
-	for topic := range CustomerManger {
-		topics = append(topics, topic)
-	}
-	mu.Unlock()
-	return topics
-}
 
 // 核心启动
 func Run(confPath string) {
@@ -84,7 +72,7 @@ func Run(confPath string) {
 		case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM:
 			log.Println("Safe Exit with:", sign)
 
-			currentTopics := getRegisterTopics()
+			currentTopics := source.GetRegisterTopics()
 
 			for _, topic := range currentTopics {
 

@@ -59,6 +59,16 @@ func GetCustomer(topic string) (customer *Customer, ok bool) {
 
 	return customer, ok
 }
+// 获取全部的注册过的消费处理器 所使用的的Topic名字
+func GetRegisterTopics() (topics []string) {
+	mu.Lock()
+	for topic := range CustomerManger {
+		topics = append(topics, topic)
+	}
+	mu.Unlock()
+	return topics
+}
+
 
 // 從Kafka中消費消息，注意这里会提交commit offset
 func ReadingMessage(ctx context.Context, c *Customer) {
