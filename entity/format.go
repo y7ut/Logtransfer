@@ -1,33 +1,26 @@
-package transfer
+package entity
 
 import (
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 )
 
-var (
-	contentRegexp       = regexp.MustCompile(`\[(?s:(.*?))\]`)
-	serviceWfLogKeyWord = []string{"errno", "logId", "uri", "refer", "cookie", "ua", "host", "clientIp", "optime", "request_params", "errmsg"}
-	MatePool            = sync.Pool{New: func() interface{} { return &Matedate{data: make(map[string]interface{})} }}
-)
-
-type Formater func(string, string) (Matedate, error)
+type Formater func(string, string) (Matedata, error)
 
 // service错误日志的处理
-func FormatServiceWfLog(sourceKey string, message string) (Matedate, error) {
+func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 	// vMateItem := MatePool.Get()
-	mateItem := MatePool.Get().(*Matedate)
+	mateItem := MatePool.Get().(*Matedata)
 
 	levelIndex := strings.Index(message, ":")
 	if levelIndex == -1 {
 		return *mateItem, fmt.Errorf("message format error")
 	}
 
-	mateItem.Topic= sourceKey
+	mateItem.Topic = sourceKey
 	mateItem.Level = message[:levelIndex]
 	message = message[levelIndex:]
 	loc, _ := time.LoadLocation("Local")
@@ -42,15 +35,15 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedate, error) {
 		if len(curentSub) < 1 {
 			continue
 		}
-		if word == "errmsg"{
-			
-			mateItem.data["message"] = strings.Replace(contentRegexp.FindStringSubmatch(logContent)[1],`"`,"",-1)
-		}else{
-			mateItem.data[word] = contentRegexp.FindStringSubmatch(logContent)[1]
+		if word == "errmsg" {
+
+			mateItem.Data["message"] = strings.Replace(contentRegexp.FindStringSubmatch(logContent)[1], `"`, "", -1)
+		} else {
+			mateItem.Data[word] = contentRegexp.FindStringSubmatch(logContent)[1]
 		}
-		
+
 	}
-	mateItem.data["timestamp"] = mateItem.create
+	mateItem.Data["timestamp"] = mateItem.create
 	result := *mateItem
 	mateItem.reset()
 	MatePool.Put(mateItem)
@@ -58,32 +51,32 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedate, error) {
 }
 
 // service错误日志的处理
-func DefaultLog(sourceKey string, message string) (Matedate, error) {
+func DefaultLog(sourceKey string, message string) (Matedata, error) {
 
 	vMateItem := MatePool.Get()
-	mateItem := vMateItem.(*Matedate)
+	mateItem := vMateItem.(*Matedata)
 
 	mateItem.Topic = sourceKey
 	mateItem.Index = sourceKey
-	mateItem.data = map[string]interface{}{"message":message}
-	
+	mateItem.Data = map[string]interface{}{"message": message}
+
 	result := *mateItem
 	MatePool.Put(vMateItem)
 	return result, nil
 }
 
 // Json 格式的错误日志处理
-func DefaultJsonLog(sourceKey string, message string) (Matedate, error) {
+func DefaultJsonLog(sourceKey string, message string) (Matedata, error) {
 
 	vMateItem := MatePool.Get()
-	mateItem := vMateItem.(*Matedate)
+	mateItem := vMateItem.(*Matedata)
 
-	data := mateItem.data
+	data := mateItem.Data
 	err := json.Unmarshal([]byte(message), &data)
 	if err != nil {
 		return *mateItem, err
 	}
-	mateItem.data = data
+	mateItem.Data = data
 
 	result := *mateItem
 	MatePool.Put(vMateItem)

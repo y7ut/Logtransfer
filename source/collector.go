@@ -1,10 +1,12 @@
-package transfer
+package source
 
 import (
 	"encoding/json"
 	"log"
 
 	"github.com/y7ut/logtransfer/conf"
+	"github.com/y7ut/logtransfer/entity"
+	"github.com/y7ut/logtransfer/plugin"
 )
 
 type Collector struct {
@@ -16,8 +18,8 @@ type Collector struct {
 type Topic struct {
 	Name     string
 	Label    string
-	PipeLine *PipeLine
-	Format   Formater
+	PipeLine *plugin.PipeLine
+	Format   entity.Formater
 }
 
 type TopicConfig struct {
@@ -34,7 +36,7 @@ type PipeLinePluginsConfig struct {
 }
 
 // 加载所有的collector
-func loadCollectors() []Collector {
+func LoadCollectors() []Collector {
 	configs := conf.GetAllConfFromEtcd()
 	collectors := make([]Collector, 0)
 	for _, v := range configs {
@@ -52,6 +54,21 @@ func loadCollectors() []Collector {
 	return collectors
 }
 
+// 收集所有需要监听的topic
+func ChooseTopic() map[*Topic]bool {
+	collector := LoadCollectors()
+	topics := loadTopics()
+
+	ableTopics := make(map[*Topic]bool)
+	for _, v := range collector {
+		currentTopic := topics[v.Topic]
+		ableTopics[currentTopic] = true
+	}
+
+	return ableTopics
+}
+
+// 解析全部的Topic并加载内部的格式器和插件pipeline
 func loadTopics() map[string]*Topic {
 	configs := conf.GetAllTopicFromEtcd()
 
@@ -69,44 +86,30 @@ func loadTopics() map[string]*Topic {
 			log.Printf("get topic setting error:%s ", currentTopic.Label)
 		}
 
-		p := PipeLine{}
+		p := plugin.PipeLine{}
 
 		// log.Println("get config",  currentTopic.PipelineConfig)
 		for _, v := range currentTopic.PipelineConfig {
-			currentPlugin := pluginsBoard[v.Name]
-			err := currentPlugin.setParams(v.Params)
+			currentPlugin := plugin.RegistedPlugins[v.Name]
+			err := currentPlugin.SetParams(v.Params)
 			if err != nil {
 				log.Panicln("plugin encode params error:", err)
 			}
-			p.appendPlugin(currentPlugin)
+			p.AppendPlugin(currentPlugin)
 		}
-		var formatMethod Formater
+		var formatMethod entity.Formater
 
 		switch currentTopic.Format {
 
 		case 1:
-			formatMethod = DefaultJsonLog
+			formatMethod = entity.DefaultJsonLog
 		case 2:
-			formatMethod = FormatServiceWfLog
+			formatMethod = entity.FormatServiceWfLog
 		default:
-			formatMethod = DefaultLog
+			formatMethod = entity.DefaultLog
 
 		}
 		topics[currentTopic.Name] = &Topic{Name: currentTopic.Name, Label: currentTopic.Label, PipeLine: &p, Format: formatMethod}
 	}
 	return topics
-}
-
-// 收集所有需要监听的topic
-func ChooseTopic() map[*Topic]bool {
-	collector := loadCollectors()
-	topics := loadTopics()
-
-	ableTopics := make(map[*Topic]bool)
-	for _, v := range collector {
-		currentTopic := topics[v.Topic]
-		ableTopics[currentTopic] = true
-	}
-
-	return ableTopics
 }

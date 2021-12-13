@@ -9,3 +9,11 @@
 2. 管道的形式处理数据
 3. 提供数据同步到ES的插件
 
+### 2.0.0
+1. 支持动态的安装卸载插件
+
+# 安装
+```
+docker build -t logtransfer:2.0 .  
+docker run -d --name=LTF logtransfer:2.0
+```
