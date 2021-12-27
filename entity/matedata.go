@@ -43,7 +43,7 @@ func CloseMessageChan() {
 
 func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 
-	wp := &WorkPool{
+	wp := &ESWorkPool{
 		WorkerFunc: func(matedatas []*Matedata) bool {
 			bulkRequest := esClient.Bulk()
 			for _, m := range matedatas {
