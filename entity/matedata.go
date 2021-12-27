@@ -43,56 +43,71 @@ func CloseMessageChan() {
 
 func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 
-	tick := time.NewTicker(3 * time.Second)
-
-	var (
-		SenderMu sync.Mutex
-	)
-
-	bulkRequest := esClient.Bulk()
-	for {
-		select {
-		case m := <-messages:
-			indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.Data)
-			SenderMu.Lock()
-			bulkRequest.Add(indexRequest)
-			SenderMu.Unlock()
-
-		case <-tick.C:
-			// Do sends the bulk requests to Elasticsearch
-			SenderMu.Lock()
+	wp := &WorkPool{
+		WorkerFunc: func(matedatas []*Matedata) bool {
+			bulkRequest := esClient.Bulk()
+			for _, m := range matedatas {
+				indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.Data)
+				bulkRequest.Add(indexRequest)
+			}
 			count := bulkRequest.NumberOfActions()
 			if count > 0 {
 				log.Printf("Send messages to Index: %d : \n", bulkRequest.NumberOfActions())
 				response, err := bulkRequest.Do(ctx)
 
 				if err != nil {
-					
 					log.Println("Save Es Error:", err)
+					return false
 				}
 
-				for _ , v := range response.Items {
-					for _, item := range v{
+				for _, v := range response.Items {
+					for _, item := range v {
 						if item.Error != nil {
 							log.Printf("Find Error in ES Result in (%s): %s", item.Index, item.Error.Reason)
+							return false
 						}
 					}
 				}
 
 				bulkRequest.Reset()
 			}
-			SenderMu.Unlock()
+			return true
+		},
+		MaxWorkerCount:        51,
+		MaxIdleWorkerDuration: 5 * time.Second,
+	}
+	wp.Start()
+
+	var mateDatesItems []*Matedata
+
+	var mu sync.Mutex
+
+	for {
+		select {
+		case m := <-messages:
+			mu.Lock()
+			mateDatesItems = append(mateDatesItems, m)
+			currentItems := mateDatesItems
+			mu.Unlock()
+
+			if len(currentItems) > 10 {
+				wp.Serve(currentItems)
+				mu.Lock()
+				mateDatesItems = mateDatesItems[:0]
+				mu.Unlock()
+			}
 
 		case <-ctx.Done():
-			// Do sends the bulk requests to Elasticsearch
-			SenderMu.Lock()
-			_, err := bulkRequest.Do(ctx)
-			if err != nil {
-				log.Println("Save Es Error:", err)
-			}
-			bulkRequest.Reset()
-			SenderMu.Unlock()
+
 			log.Println("Exiting...")
+
+			mu.Lock()
+			currentItems := mateDatesItems
+			mu.Unlock()
+
+			wp.Serve(currentItems)
+
+			wp.Stop()
 			return
 		}
 	}

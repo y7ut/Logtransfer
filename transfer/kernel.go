@@ -37,9 +37,11 @@ func Run(confPath string) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 启动es消息发送器
-	for i := 0; i < 3; i++ {
-		go entity.MatedateSender(ctx, esClient)
-	}
+	// for i := 0; i < 20; i++ {
+	// 	go entity.MatedateSender(ctx, esClient)
+	// }
+
+	go entity.MatedateSender(ctx, esClient)
 
 	// 用于处理启动与关闭消费处理器的信号通知
 	go func() {
