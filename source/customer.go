@@ -79,7 +79,7 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 	// var trycount int
 	// var cstSh, _ = time.LoadLocation("Asia/Shanghai") //上海时区
 	var errMessage strings.Builder
-	// log.Println(c.HandlePipeline.pipe)
+
 
 	var matedata entity.Matedata
 	for {

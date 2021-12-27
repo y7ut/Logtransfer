@@ -43,7 +43,7 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 		}
 
 	}
-	mateItem.Data["timestamp"] = mateItem.create
+	mateItem.Data["timestamp"] = mateItem.create.Format("2006-01-02 15:04:05")
 	result := *mateItem
 	mateItem.reset()
 	MatePool.Put(mateItem)
