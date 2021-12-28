@@ -88,7 +88,7 @@ func Run(confPath string) {
 				closeWg.Wait()
 			}
 			entity.CloseMessageChan()
-
+			cancel()
 			log.Printf(" Success unstall %d Transfer", len(currentTopics))
 			os.Exit(0)
 		}
