@@ -31,15 +31,14 @@ func (c Customer) Exit() {
 }
 
 // 结束信号监听
-func (c Customer) Listen() chan struct{} {
+func (c Customer) Listen() <-chan struct{} {
 	return c.done
 }
 
 // 初始化一个消费处理器
 func InitCustomer(topic *Topic) *Customer {
-	GroupID := topic.Name + "_group"
-	r := InitReader(topic.Name, GroupID)
-	log.Printf("Check Customer group of [%s] success!", GroupID)
+	r := InitReader(topic.Name)
+	log.Printf("Check Customer group of [%s] success!", topic.Name)
 	return &Customer{Topic: topic, Readers: r, done: make(chan struct{}), HandlePipeline: topic.PipeLine, Format: topic.Format}
 }
 
@@ -47,6 +46,12 @@ func InitCustomer(topic *Topic) *Customer {
 func RegisterManger(c *Customer) {
 	mu.Lock()
 	CustomerManger[c.Topic.Name] = c
+	mu.Unlock()
+}
+
+func UnstallManger(topic string){
+	mu.Lock()
+	delete(CustomerManger, topic)
 	mu.Unlock()
 }
 
@@ -75,34 +80,44 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 	readyToRead := make(chan *kafka.Reader)
 
 	go func(ctx context.Context, c *Customer) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
 		for {
 			select {
 			case <-c.Listen():
 				return
 			case <-ctx.Done():
 				c.Exit()
+				return
 			case reader := <-readyToRead:
-				defer reader.Close()
+				
 				go func(ctx context.Context, c *Customer) {
-					var errMessage strings.Builder
+					defer reader.Close()
 
+					var errMessage strings.Builder
 					var matedata entity.Matedata
+
 					for {
 						select {
-						case <-ctx.Done():
-							c.Exit()
+						case <- ctx.Done():
+							return
 						default:
 							m, err := reader.ReadMessage(ctx)
-
 							if err != nil {
-								// 退出
-								// c.Exit()
-								errMessage.Reset()
-								errMessage.WriteString("Reader Error")
-								errMessage.WriteString(err.Error())
-								log.Println(errMessage.String())
-
-								continue
+								switch err {
+								case context.Canceled:
+									// 监听主上下文信号
+									log.Println("Closing Kafka Conection!")
+									return
+								default:
+									errMessage.Reset()
+									errMessage.WriteString("Reader Error")
+									errMessage.WriteString(err.Error())
+									log.Println(errMessage.String())
+	
+									continue
+								}
+							
 							}
 
 							matedata, err = c.Format(string(reader.Config().Topic), string(m.Value))
@@ -129,6 +144,5 @@ func ReadingMessage(ctx context.Context, c *Customer) {
 		log.Printf("Start Customer Group[%s][%d] success!", p.Config().GroupID, p.Config().Partition)
 
 		readyToRead <- p
-
 	}
 }

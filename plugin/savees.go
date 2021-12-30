@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/y7ut/logtransfer/entity"
 )
@@ -10,7 +11,7 @@ import (
 type SaveES Plugin
 
 func (saveEs *SaveES) HandleFunc(m *entity.Matedata) error {
-	// log.Println("SaveES:")
+	log.Println("SaveES:")
 	m.Index = fmt.Sprintf("%s", (*saveEs.params)["index"])
 	m.Data["topic"] = m.Topic
 	m.Data["level"] = m.Level

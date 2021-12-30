@@ -8,7 +8,9 @@ import (
 	"github.com/y7ut/logtransfer/conf"
 )
 
-func InitReader(topic string, groupId string) []*kafka.Reader {
+const GroupSuffix = "_group"
+
+func InitReader(topic string) []*kafka.Reader {
 	// // 先去创建一下这个分组
 	// make a writer that produces to topic-A, using the least-bytes distribution
 	var readers []*kafka.Reader
@@ -16,7 +18,7 @@ func InitReader(topic string, groupId string) []*kafka.Reader {
 		readers = append(readers, kafka.NewReader(kafka.ReaderConfig{
 			Brokers:   strings.Split(conf.APPConfig.Kafka.Address, ","),
 			Topic:     topic,
-			GroupID:   groupId,
+			GroupID:   topic+GroupSuffix,
 			// Partition: 0,
 			MinBytes:  10e3, // 10KB
 			MaxBytes:  10e6, // 10MB
@@ -33,15 +35,17 @@ func InitReader(topic string, groupId string) []*kafka.Reader {
 	return readers
 }
 
-func CreateCustomerGroup(topic string, groupId string) {
+func CreateCustomerGroup(topic string) error {
 	config := kafka.ConsumerGroupConfig{
-		ID:          groupId,
+		ID:          topic+GroupSuffix,
 		Brokers:     strings.Split(conf.APPConfig.Kafka.Address, ","),
 		Topics:      []string{topic},
 		StartOffset: kafka.LastOffset,
 	}
 	_, err := kafka.NewConsumerGroup(config)
+	log.Printf("Customer group [%s] created success!", topic+GroupSuffix)
 	if err != nil {
-		log.Println("create CustomerGroup error:", err)
+		return err
 	}
+	return nil
 }

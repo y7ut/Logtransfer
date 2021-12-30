@@ -36,12 +36,19 @@ func (m *Matedata) reset() {
 func HandleMessage(m *Matedata) {
 	messages <- m
 }
-
+ 
 func CloseMessageChan() {
 	close(messages)
 }
 
-func MatedateSender(ctx context.Context, esClient *elastic.Client) {
+func MatedateSender(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// 初始化ES客户端
+	esClient, err := elastic.NewClient(elastic.SetSniff(false), elastic.SetURL(conf.APPConfig.Es.Address))
+	if err != nil {
+		panic(err)
+	}
 
 	wp := &ESWorkPool{
 		WorkerFunc: func(matedatas []*Matedata) bool {
@@ -53,8 +60,9 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 			count := bulkRequest.NumberOfActions()
 			if count > 0 {
 				log.Printf("Send messages to Index: %d : \n", bulkRequest.NumberOfActions())
-				response, err := bulkRequest.Do(ctx)
-
+				timectx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				response, err := bulkRequest.Do(timectx)
+				cancel()
 				if err != nil {
 					log.Println("Save Es Error:", err)
 					return false
@@ -73,11 +81,12 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 			}
 			return true
 		},
-		MaxWorkerCount:        51,
+		MaxWorkerCount:        50,
 		MaxIdleWorkerDuration: 5 * time.Second,
 	}
-	wp.Start()
 
+	wp.Start()
+	defer wp.Stop()
 	var mateDatesItems []*Matedata
 
 	var mu sync.Mutex
@@ -106,8 +115,6 @@ func MatedateSender(ctx context.Context, esClient *elastic.Client) {
 			mu.Unlock()
 
 			wp.Serve(currentItems)
-
-			wp.Stop()
 			return
 		}
 	}
