@@ -104,22 +104,7 @@ func GetConfFromEtcd(name string) (EtcdValue, error) {
 	var value EtcdValue
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	resp, err := cli.Get(ctx, statusPath+name)
-	cancel()
-	if err != nil {
-		log.Println(fmt.Sprintf("Get Etcd config failed, err:%s \n", err))
-	}
-
-	if len(resp.Kvs) == 0 {
-		return value, fmt.Errorf("status error")
-	}
-	status := string(resp.Kvs[0].Value)
-	if status != "1" {
-		return value, fmt.Errorf("status error")
-	}
-
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	resp, err = cli.Get(ctx, configPath+name)
+	resp, err := cli.Get(ctx, configPath+name)
 	cancel()
 
 	if err != nil {
@@ -181,6 +166,14 @@ func WatchLogTopicToEtcd() clientv3.WatchChan {
 func WatchLogConfigToEtcd() clientv3.WatchChan {
 
 	wch := cli.Watch(context.Background(), configPath, clientv3.WithPrefix())
+
+	return wch
+}
+
+
+func WatchLogStatusToEtcd() clientv3.WatchChan {
+
+	wch := cli.Watch(context.Background(), statusPath, clientv3.WithPrefix())
 
 	return wch
 }

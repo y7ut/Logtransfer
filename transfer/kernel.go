@@ -44,13 +44,13 @@ func Run(confPath string) {
 
 	go TopicWatcherHandle()
 
-	// 监听Agent Collector变更
+	// 监听 Agent Collector 变更
 	go source.WatchConfigs()
 
-	// 还要监听Topic的配置变更
+	// 还要监听 Topic 的配置变更
 	go source.WatchTopics()
-
-	// TODO: 监听Agent 启动状态变更
+	// 还要监听 Status 的配置变更
+	go source.WatchStatus()
 
 	for sign := range sign() {
 		switch sign {
