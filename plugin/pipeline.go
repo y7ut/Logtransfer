@@ -9,7 +9,6 @@ import (
 	"github.com/y7ut/logtransfer/entity"
 )
 
-
 type Handler interface {
 	HandleFunc(*entity.Matedata) error
 	SetParams(string) error
@@ -22,6 +21,10 @@ type Plugin struct {
 
 type PipeLine struct {
 	pipe []*Handler
+}
+
+func (p *PipeLine) Length() int {
+	return len(p.pipe)
 }
 
 func (p *PipeLine) AppendPlugin(plugin Handler) {

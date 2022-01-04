@@ -18,36 +18,40 @@ var (
 
 // 消费处理器
 type Customer struct {
-	Reader         *kafka.Reader      // 特定消费者的专属Kafka Reader (我从哪里来)
-	HandlePipeline *plugin.PipeLine   // 从Topic中构建的Piepline (要到那里去)
-	Format         entity.Formater   // 解析元数据的格式器 （变形记。。）
-	done           chan struct{}	// 结束标志
+	Readers        []*kafka.Reader // 特定消费者的专属Kafka Reader Slice (我从哪里来)
+	Topic          *Topic
+	HandlePipeline *plugin.PipeLine // 从Topic中构建的Piepline (要到那里去)
+	Format         entity.Formater  // 解析元数据的格式器 （变形记。。）
+	done           chan struct{}    // 结束标志
 }
 
 // 结束一个消费处理器
 func (c Customer) Exit() {
-	go func() {
-		c.done <- struct{}{}
-	}()
+	c.done <- struct{}{}
 }
 
 // 结束信号监听
-func (c Customer) Listen() chan struct{} {
+func (c Customer) Listen() <-chan struct{} {
 	return c.done
 }
 
 // 初始化一个消费处理器
-func InitCustomer(topic *Topic) *Customer{
-	GroupID := topic.Name + "_group"
-	r := InitReader(topic.Name, GroupID)
-	log.Printf("Check Customer group of [%s] success!", GroupID)
-	return &Customer{Reader: r, done: make(chan struct{}), HandlePipeline: topic.PipeLine, Format: topic.Format}
+func InitCustomer(topic *Topic) *Customer {
+	r := InitReader(topic.Name)
+	log.Printf("Check Customer group of [%s] success!", topic.Name)
+	return &Customer{Topic: topic, Readers: r, done: make(chan struct{}), HandlePipeline: topic.PipeLine, Format: topic.Format}
 }
 
 // 全局的注册当前工作的消费处理器
 func RegisterManger(c *Customer) {
 	mu.Lock()
-	CustomerManger[c.Reader.Config().Topic] = c
+	CustomerManger[c.Topic.Name] = c
+	mu.Unlock()
+}
+
+func UnstallManger(topic string){
+	mu.Lock()
+	delete(CustomerManger, topic)
 	mu.Unlock()
 }
 
@@ -59,6 +63,7 @@ func GetCustomer(topic string) (customer *Customer, ok bool) {
 
 	return customer, ok
 }
+
 // 获取全部的注册过的消费处理器 所使用的的Topic名字
 func GetRegisterTopics() (topics []string) {
 	mu.Lock()
@@ -69,55 +74,75 @@ func GetRegisterTopics() (topics []string) {
 	return topics
 }
 
-
 // 從Kafka中消費消息，注意这里会提交commit offset
 func ReadingMessage(ctx context.Context, c *Customer) {
-	defer c.Reader.Close()
 
-	log.Printf("Start Customer Group[%s] success!", c.Reader.Config().GroupID)
+	readyToRead := make(chan *kafka.Reader)
 
-	// var trycount int
-	// var cstSh, _ = time.LoadLocation("Asia/Shanghai") //上海时区
-	var errMessage strings.Builder
-	// log.Println(c.HandlePipeline.pipe)
+	go func(ctx context.Context, c *Customer) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		for {
+			select {
+			case <-c.Listen():
+				return
+			case <-ctx.Done():
+				c.Exit()
+				return
+			case reader := <-readyToRead:
+				
+				go func(ctx context.Context, c *Customer) {
+					defer reader.Close()
 
-	var matedata entity.Matedata
-	for {
-		select {
-		case <-c.Listen():
-			// 监听需要关闭的信号
+					var errMessage strings.Builder
+					var matedata entity.Matedata
 
-			c.Exit()
-			log.Println("Close customer of Topic :", c.Reader.Config().Topic)
-			return
-		default:
-			// // 使用超时上下文, 但是这样是非阻塞，超过deadline就报错了
-			// // timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			// // 这里使用阻塞的上下文
+					for {
+						select {
+						case <- ctx.Done():
+							return
+						default:
+							m, err := reader.ReadMessage(ctx)
+							if err != nil {
+								switch err {
+								case context.Canceled:
+									// 监听主上下文信号
+									log.Println("Closing Kafka Conection!")
+									return
+								default:
+									errMessage.Reset()
+									errMessage.WriteString("Reader Error")
+									errMessage.WriteString(err.Error())
+									log.Println(errMessage.String())
+	
+									continue
+								}
+							
+							}
 
-			m, err := c.Reader.ReadMessage(ctx)
+							matedata, err = c.Format(string(reader.Config().Topic), string(m.Value))
+							if err != nil {
+								errMessage.Reset()
+								errMessage.WriteString("Format Error")
+								errMessage.WriteString(err.Error())
+								log.Println(errMessage.String())
+								continue
+							}
+							// 流入pipe
+							c.HandlePipeline.Enter(matedata)
+						}
+					}
+				}(ctx, c)
 
-			if err != nil {
-				// 退出
-				// c.Exit()
-				errMessage.Reset()
-				errMessage.WriteString("Reader Error")
-				errMessage.WriteString(err.Error())
-				log.Println(errMessage.String())
-
-				continue
 			}
-
-			matedata, err = c.Format(string(c.Reader.Config().Topic), string(m.Value))
-			if err != nil {
-				errMessage.Reset()
-				errMessage.WriteString("Format Error")
-				errMessage.WriteString(err.Error())
-				log.Println(errMessage.String())
-				continue
-			}
-			// 流入pipe
-			c.HandlePipeline.Enter(matedata)
 		}
+
+	}(ctx, c)
+
+	for _, p := range c.Readers {
+
+		log.Printf("Start Customer Group[%s][%d] success!", p.Config().GroupID, p.Config().Partition)
+
+		readyToRead <- p
 	}
 }

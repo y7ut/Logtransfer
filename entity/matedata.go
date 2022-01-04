@@ -36,51 +36,85 @@ func (m *Matedata) reset() {
 func HandleMessage(m *Matedata) {
 	messages <- m
 }
-
+ 
 func CloseMessageChan() {
 	close(messages)
 }
 
-func MatedateSender(ctx context.Context, esClient *elastic.Client) {
+func MatedateSender(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// 初始化ES客户端
+	esClient, err := elastic.NewClient(elastic.SetSniff(false), elastic.SetURL(conf.APPConfig.Es.Address))
+	if err != nil {
+		panic(err)
+	}
 
-	tick := time.NewTicker(3 * time.Second)
-	var (
-		SenderMu sync.Mutex
-	)
+	wp := &ESWorkPool{
+		WorkerFunc: func(matedatas []*Matedata) bool {
+			bulkRequest := esClient.Bulk()
+			for _, m := range matedatas {
+				indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.Data)
+				bulkRequest.Add(indexRequest)
+			}
+			count := bulkRequest.NumberOfActions()
+			if count > 0 {
+				log.Printf("Send messages to Index: %d : \n", bulkRequest.NumberOfActions())
+				timectx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				response, err := bulkRequest.Do(timectx)
+				cancel()
+				if err != nil {
+					log.Println("Save Es Error:", err)
+					return false
+				}
 
-	bulkRequest := esClient.Bulk()
+				for _, v := range response.Items {
+					for _, item := range v {
+						if item.Error != nil {
+							log.Printf("Find Error in ES Result in (%s): %s", item.Index, item.Error.Reason)
+							return false
+						}
+					}
+				}
+
+				bulkRequest.Reset()
+			}
+			return true
+		},
+		MaxWorkerCount:        50,
+		MaxIdleWorkerDuration: 5 * time.Second,
+	}
+
+	wp.Start()
+	defer wp.Stop()
+	var mateDatesItems []*Matedata
+
+	var mu sync.Mutex
+
 	for {
 		select {
 		case m := <-messages:
+			mu.Lock()
+			mateDatesItems = append(mateDatesItems, m)
+			currentItems := mateDatesItems
+			mu.Unlock()
 
-			indexRequest := elastic.NewBulkIndexRequest().Index(m.Index).Doc(m.Data)
-			bulkRequest.Add(indexRequest)
-
-		case <-tick.C:
-			// Do sends the bulk requests to Elasticsearch
-			SenderMu.Lock()
-			count := bulkRequest.NumberOfActions()
-
-			if count > 0 {
-				log.Printf("Send message to Es: %d : \n", bulkRequest.NumberOfActions())
-				_, err := bulkRequest.Do(ctx)
-				if err != nil {
-					log.Println("Save Es Error:", err)
-				}
-				bulkRequest.Reset()
+			if len(currentItems) > 10 {
+				wp.Serve(currentItems)
+				mu.Lock()
+				mateDatesItems = mateDatesItems[:0]
+				mu.Unlock()
 			}
-			SenderMu.Unlock()
 
 		case <-ctx.Done():
-			// Do sends the bulk requests to Elasticsearch
-			SenderMu.Lock()
-			_, err := bulkRequest.Do(ctx)
-			if err != nil {
-				log.Println("Save Es Error:", err)
-			}
-			bulkRequest.Reset()
-			SenderMu.Unlock()
+
 			log.Println("Exiting...")
+
+			mu.Lock()
+			currentItems := mateDatesItems
+			mu.Unlock()
+
+			wp.Serve(currentItems)
 			return
 		}
 	}
