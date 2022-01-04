@@ -60,7 +60,7 @@ func MatedateSender(ctx context.Context) {
 			count := bulkRequest.NumberOfActions()
 			if count > 0 {
 				log.Printf("Send messages to Index: %d : \n", bulkRequest.NumberOfActions())
-				timectx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+				timectx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
 				response, err := bulkRequest.Do(timectx)
 				cancel()
 				if err != nil {
