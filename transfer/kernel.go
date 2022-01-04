@@ -155,7 +155,14 @@ func TopicWatcherHandle() {
 
 func sign() <-chan os.Signal {
 	c := make(chan os.Signal, 2)
+
+	signals := []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2}
 	// 监听信号
-	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2)
+	if !signal.Ignored(syscall.SIGHUP) {
+		signals = append(signals, syscall.SIGHUP)
+	}
+
+	signal.Notify(c, signals...)
+
 	return c
 }

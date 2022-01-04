@@ -12,8 +12,16 @@
 ### 2.0.0
 1. 支持动态的安装卸载插件
 
+### 2.1.0
+1. 添加动态的配置监控
+2. 添加ES消息存储的协程池
+
+### 2.1.1
+1. 优化退出信号的监听
+2. 修改ES Save的Deadline
+
 # 安装
 ```
-docker build -t logtransfer:2.0 .  
-docker run -d --name=LTF logtransfer:2.0
+docker build -t logtransfer:version .  
+docker run -d --name=LTF logtransfer:version
 ```

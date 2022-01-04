@@ -7,7 +7,7 @@ import (
 	"github.com/y7ut/logtransfer/transfer"
 )
 
-const version = "2.1.0"
+const version = "2.1.1"
 
 var c = flag.String("c", "./logtransfer.conf", "使用配置文件启动")
 var v = flag.Bool("v", false, "查看当前程序版本")
