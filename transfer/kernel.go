@@ -62,7 +62,7 @@ func Run(confPath string) {
 			for _, topic := range currentTopics {
 
 				Close <- topic
-				log.Printf(" Customer %s unstalling...", topic)
+				log.Printf("Customer %s unstalling...", topic)
 
 			}
 			cancel()
@@ -86,7 +86,7 @@ func CollectorRegister(ctx context.Context) {
 		case closer := <-Close:
 			c, ok := source.GetCustomer(closer)
 			if !ok {
-				log.Printf(" Customer %s unstall Failed ", closer)
+				log.Printf("Customer %s unstall Failed ", closer)
 				break
 			}
 			source.UnstallManger(closer)
@@ -121,7 +121,7 @@ func TopicWatcherHandle() {
 				log.Println("Put topic but not used")
 				err := source.CreateCustomerGroup(topic.Name)
 				if err != nil {
-					log.Printf(" Create Topic Kafka customer group Failed : %s", err)
+					log.Printf("Create Topic Kafka customer group Failed : %s", err)
 					continue
 				}
 				continue
@@ -140,7 +140,7 @@ func TopicWatcherHandle() {
 			// closeWg.Add(1)
 
 			Close <- deleteTopic
-			log.Printf(" Customer %s deleting...", deleteTopic)
+			log.Printf("Customer %s deleting...", deleteTopic)
 			// closeWg.Wait()
 		}
 	}()
