@@ -36,7 +36,7 @@ func (m *Matedata) reset() {
 func HandleMessage(m *Matedata) {
 	messages <- m
 }
- 
+
 func CloseMessageChan() {
 	close(messages)
 }
@@ -90,19 +90,30 @@ func MatedateSender(ctx context.Context) {
 	var mateDatesItems []*Matedata
 
 	var mu sync.Mutex
-
+	autoTicker := time.NewTicker(10 * time.Second)
 	for {
 		select {
 		case m := <-messages:
 			mu.Lock()
 			mateDatesItems = append(mateDatesItems, m)
 			currentItems := mateDatesItems
-			mu.Unlock()
 
 			if len(currentItems) > 10 {
-				wp.Serve(currentItems)
-				mu.Lock()
 				mateDatesItems = mateDatesItems[:0]
+				mu.Unlock()
+				wp.Serve(currentItems)
+			}else{
+				mu.Unlock()
+			}
+		case <-autoTicker.C:
+			mu.Lock()
+			currentItems := mateDatesItems
+			
+			if len(currentItems) > 0 {
+				mateDatesItems = mateDatesItems[:0]
+				mu.Unlock()
+				wp.Serve(currentItems)
+			}else{
 				mu.Unlock()
 			}
 

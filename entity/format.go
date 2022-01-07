@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const (
+	Location = "Asia/Shanghai"
+)
+
 type Formater func(string, string) (Matedata, error)
 
 // service错误日志的处理
@@ -23,7 +27,8 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 	mateItem.Topic = sourceKey
 	mateItem.Level = message[:levelIndex]
 	message = message[levelIndex:]
-	loc, _ := time.LoadLocation("Local")
+	
+	loc, _ := time.LoadLocation(Location)
 	logTime, _ := time.ParseInLocation(": 06-01-02 15:04:05 ", message[:strings.Index(message, "[")], loc)
 	mateItem.create = logTime
 	keyword := serviceWfLogKeyWord
@@ -65,7 +70,7 @@ func DefaultLog(sourceKey string, message string) (Matedata, error) {
 	return result, nil
 }
 
-// Json 格式的错误日志处理
+// 标志Json 格式的错误日志处理
 func DefaultJsonLog(sourceKey string, message string) (Matedata, error) {
 
 	vMateItem := MatePool.Get()
@@ -82,3 +87,5 @@ func DefaultJsonLog(sourceKey string, message string) (Matedata, error) {
 	MatePool.Put(vMateItem)
 	return result, nil
 }
+
+func 
