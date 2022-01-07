@@ -87,5 +87,3 @@ func DefaultJsonLog(sourceKey string, message string) (Matedata, error) {
 	MatePool.Put(vMateItem)
 	return result, nil
 }
-
-func 
