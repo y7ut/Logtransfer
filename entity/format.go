@@ -28,9 +28,9 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 	mateItem.Level = message[:levelIndex]
 	message = message[levelIndex:]
 
-	loc, err := time.LoadLocation(Location)
+	loc, err := time.LoadLocation("UTC")
 	if err != nil {
-		loc = time.FixedZone("CST", 8*3600)
+		loc = time.FixedZone("UTC", 0)
 	}
 	logTime, _ := time.ParseInLocation(": 06-01-02 15:04:05 ", message[:strings.Index(message, "[")], loc)
 	mateItem.create = logTime
