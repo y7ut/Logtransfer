@@ -21,7 +21,6 @@ func (dump *Dump) HandleFunc(m *entity.Matedata) error {
 			if err != nil {
 				continue
 			}
-			log.Println("DP",createdAt)
 			// UTC时间就是+8小时
 			v = createdAt.UTC().Format("2006-01-02 15:04:05")
 		}

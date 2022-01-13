@@ -26,7 +26,6 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 
 	// 给时间调回UTC+8
 	logTime, _ := time.ParseInLocation(": 06-01-02 15:04:05 ", message[:strings.Index(message, "[")], time.FixedZone("UTC", 8*3600))
-
 	mateItem.create = logTime
 	keyword := serviceWfLogKeyWord
 	for _, word := range keyword {
@@ -47,7 +46,6 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 	}
 	// 那这里获取UTC时间为8小时前
 	mateItem.Data["timestamp"] = mateItem.create.UTC().Format("2006-01-02 15:04:05")
-
 	result := *mateItem
 	mateItem.reset()
 	MatePool.Put(mateItem)
