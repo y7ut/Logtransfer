@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-const (
-	Location = "Asia/Shanghai"
-)
-
 type Formater func(string, string) (Matedata, error)
 
 // service错误日志的处理
@@ -28,11 +24,9 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 	mateItem.Level = message[:levelIndex]
 	message = message[levelIndex:]
 
-	loc, err := time.LoadLocation("UTC")
-	if err != nil {
-		loc = time.FixedZone("UTC", 0)
-	}
-	logTime, _ := time.ParseInLocation(": 06-01-02 15:04:05 ", message[:strings.Index(message, "[")], loc)
+	// 给时间调回UTC+8
+	logTime, _ := time.ParseInLocation(": 06-01-02 15:04:05 ", message[:strings.Index(message, "[")], time.FixedZone("UTC", 8*3600))
+
 	mateItem.create = logTime
 	keyword := serviceWfLogKeyWord
 	for _, word := range keyword {
@@ -51,7 +45,9 @@ func FormatServiceWfLog(sourceKey string, message string) (Matedata, error) {
 		}
 
 	}
-	mateItem.Data["timestamp"] = mateItem.create.Format("2006-01-02 15:04:05")
+	// 那这里获取UTC时间为8小时前
+	mateItem.Data["timestamp"] = mateItem.create.UTC().Format("2006-01-02 15:04:05")
+
 	result := *mateItem
 	mateItem.reset()
 	MatePool.Put(mateItem)

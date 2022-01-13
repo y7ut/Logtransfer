@@ -18,4 +18,6 @@ WORKDIR /app
 
 COPY --from=build /app /app
 
+VOLUME /app/log/
+
 ENTRYPOINT ["/app/logtransfer"]
